@@ -220,8 +220,18 @@ section { padding-block: 2.75rem; }
   padding: 3px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; display: inline-flex;
   align-items: center; gap: 4px; backdrop-filter: blur(4px); pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2);
 }
-.cap { font-family: var(--font-hand); font-size: 1.5rem; line-height: 1.2; text-align: center; padding: 0.55rem 0.2rem 0.3rem; outline: none; min-height: 2.3rem; overflow-wrap: anywhere; }
-.cap:focus { background: #f0dccf; }
+.cap {
+  font-family: var(--font-hand); font-size: 1.5rem; line-height: 1.2; text-align: center;
+  padding: 0.55rem 0.2rem 0.3rem; outline: none; min-height: 2.3rem; overflow-wrap: anywhere;
+  cursor: text; border-radius: 6px; transition: background 0.2s, box-shadow 0.2s;
+}
+.cap:hover { background: rgba(0, 0, 0, 0.06); }
+.cap:focus { background: #f0dccf; box-shadow: 0 0 0 2px rgba(255, 123, 147, 0.5); }
+.name[contenteditable="true"] { cursor: text; border-radius: 8px; transition: background 0.2s; }
+.name[contenteditable="true"]:hover { background: rgba(255, 255, 255, 0.05); }
+.sub[contenteditable="true"] { cursor: text; border-radius: 6px; transition: background 0.2s; }
+.sub[contenteditable="true"]:hover { background: rgba(255, 255, 255, 0.05); }
+.wall.dragover { outline: 2px dashed var(--gold); outline-offset: 8px; border-radius: 16px; background: rgba(246, 205, 132, 0.05); }
 .note { color: var(--muted); font-size: 0.9rem; max-width: 42rem; margin: 0; }
 
 /* Lightbox */
@@ -468,6 +478,7 @@ body.exported .cap {
     <button class="sb-btn ghost" id="sbBulkBtn" type="button">📁 Bulk Add Photos</button>
     <button class="sb-btn ghost" id="sbAddSongsBtn" type="button">🎵 Add Songs</button>
     <button class="sb-btn save" id="sbSaveBtn" type="button">💾 Save &amp; Download Website</button>
+    <button class="sb-btn ghost" id="sbResetBtn" type="button" title="Reset all custom changes back to clean template">↺ Reset</button>
   </div>
 </aside>
 
@@ -476,9 +487,9 @@ body.exported .cap {
     <div class="hero-text">
       <div class="eyebrow">19 October &nbsp;·&nbsp; a day made for you</div>
       <h1>Happy Birthday</h1>
-      <span class="name" id="name">My Love Sathya</span>
+      <span class="name" id="name" contenteditable="true" spellcheck="false" title="Click to edit name">My Love Sathya</span>
       <div class="heart-div" aria-hidden="true"><svg width="18" height="16" viewBox="0 0 18 16"><path d="M9 15.5C-4 7 3-1 9 4.2 15-1 22 7 9 15.5z" fill="currentColor"/></svg></div>
-      <p class="sub" id="tag">Every picture here is a day I would live again. Press play, blow out the candles, and read all the way to the end.</p>
+      <p class="sub" id="tag" contenteditable="true" spellcheck="false" title="Click to edit subtitle">Every picture here is a day I would live again. Press play, blow out the candles, and read all the way to the end.</p>
       <div id="cd" hidden aria-live="off"><span>Your birthday begins in</span><b id="cdD">0</b><span>d</span><b id="cdH">0</b><span>h</span><b id="cdM">0</b><span>m</span><b id="cdS">0</b><span>s</span></div>
       <div class="row">
         <button class="btn" id="startBtn" type="button">Play our songs</button>
@@ -703,6 +714,7 @@ Happy birthday.</textarea>
   var $ = function (id) { return document.getElementById(id); };
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var BIRTH_MONTH = 9, BIRTH_DAY = 19; // 19 October
+  var tracks = [];
 
   /* ---------- Night sky: stars and rising hearts ---------- */
   var sky = $("sky"), sg = sky.getContext("2d"), bits = [];
@@ -855,12 +867,12 @@ Happy birthday.</textarea>
 
   /* ---------- Photos and Videos ---------- */
   var sampleMemories = [
-    { src: "images/photo1.jpg", caption: "Our first picture" },
-    { src: "images/photo2.jpg", caption: "That beautiful day" },
-    { src: "images/photo3.jpg", caption: "You, laughing" },
-    { src: "images/photo4.jpg", caption: "Our favourite place" },
-    { src: "images/photo5.jpg", caption: "Just us two" },
-    { src: "images/photo6.jpg", caption: "Every trip with you" }
+    { src: "", caption: "Our first picture" },
+    { src: "", caption: "That beautiful day" },
+    { src: "", caption: "You, laughing" },
+    { src: "", caption: "Our favourite place" },
+    { src: "", caption: "Just us two" },
+    { src: "", caption: "Every trip with you" }
   ];
   var tilts = [-3, 2, -1.5, 3, -2.5, 1.5, -2, 2.5];
   var wall = $("wall"), target1 = null, lbFrame = null;
@@ -882,11 +894,69 @@ Happy birthday.</textarea>
     wall.querySelectorAll(".polaroid").forEach(function (c) {
       if (c.querySelector("img, video")) validCards++;
     });
-    var songCount = tracks.length;
+    var songCount = (tracks && tracks.length) || 0;
     var el = $("sbCount");
     if (el) {
       el.textContent = validCards + " " + (validCards === 1 ? "memory" : "memories") + (cards !== validCards ? " (" + cards + " cards)" : "") + " · " + songCount + " " + (songCount === 1 ? "song" : "songs");
     }
+  }
+
+  var STORAGE_KEY = "birthday_story_custom_v1";
+
+  function getStoryState() {
+    var memories = [];
+    wall.querySelectorAll(".polaroid").forEach(function (card) {
+      var img = card.querySelector(".frame img");
+      var vid = card.querySelector(".frame video");
+      var cap = (card.querySelector(".cap").textContent || "").trim();
+      if (img && img.src) {
+        memories.push({ src: img.src, caption: cap, isVideo: false });
+      } else if (vid && vid.src) {
+        memories.push({ src: vid.src, caption: cap, isVideo: true });
+      } else {
+        memories.push({ src: "", caption: cap, isVideo: false });
+      }
+    });
+    return {
+      name: ($("name") ? $("name").textContent : "").trim() || "My Love Sathya",
+      tag: ($("tag") ? $("tag").textContent : "").trim(),
+      since: $("since") ? $("since").value : "2024-08-19",
+      letter: $("letter") ? $("letter").value : "",
+      memories: memories
+    };
+  }
+
+  function persistStory() {
+    try {
+      var data = getStoryState();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function restoreStoryFromStorage() {
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return false;
+      var data = JSON.parse(saved);
+      if (!data) return false;
+      if (data.name && $("name")) $("name").textContent = data.name;
+      if (data.tag && $("tag")) $("tag").textContent = data.tag;
+      if (data.since && $("since")) {
+        $("since").value = data.since;
+        updateDays();
+      }
+      if (data.letter !== undefined && $("letter")) $("letter").value = data.letter;
+      if (data.memories && data.memories.length) {
+        wall.textContent = "";
+        data.memories.forEach(function (m, idx) {
+          makeCard(idx, m.caption, m.src, m.isVideo);
+        });
+        updateCardNumbers();
+        updateStudioCounts();
+        return true;
+      }
+    } catch (e) {}
+    return false;
   }
 
   function processMediaFile(file, callback) {
@@ -990,6 +1060,7 @@ Happy birthday.</textarea>
       if (card.previousElementSibling) {
         wall.insertBefore(card, card.previousElementSibling);
         updateCardNumbers();
+        persistStory();
       }
     });
 
@@ -1004,6 +1075,7 @@ Happy birthday.</textarea>
       if (card.nextElementSibling) {
         wall.insertBefore(card.nextElementSibling, card);
         updateCardNumbers();
+        persistStory();
       }
     });
 
@@ -1018,6 +1090,7 @@ Happy birthday.</textarea>
       card.remove();
       updateCardNumbers();
       updateStudioCounts();
+      persistStory();
     });
 
     tools.appendChild(leftBtn);
@@ -1045,7 +1118,11 @@ Happy birthday.</textarea>
     cap.spellcheck = false;
     cap.title = "Tap to edit caption";
     cap.textContent = caption || "Our moment";
-    cap.addEventListener("blur", updateStudioCounts);
+    cap.addEventListener("blur", function () {
+      updateStudioCounts();
+      persistStory();
+    });
+    cap.addEventListener("input", persistStory);
 
     card.appendChild(fr);
     card.appendChild(cap);
@@ -1064,6 +1141,7 @@ Happy birthday.</textarea>
     processMediaFile(file, function (dataUrl, isVideo) {
       attachMediaSrc(fr, dataUrl, isVideo);
       updateStudioCounts();
+      persistStory();
     });
   }
 
@@ -1074,7 +1152,13 @@ Happy birthday.</textarea>
     modalTargetFrame = targetFrame || null;
     pendingModalData = null;
     $("modalFileInput").value = "";
-    $("modalCaptionInput").value = "";
+    if (modalTargetFrame) {
+      var parentCard = modalTargetFrame.closest(".polaroid");
+      var capEl = parentCard ? parentCard.querySelector(".cap") : null;
+      $("modalCaptionInput").value = capEl ? capEl.textContent.trim() : "";
+    } else {
+      $("modalCaptionInput").value = "";
+    }
     $("modalPreviewWrap").hidden = true;
     $("modalPreviewImg").hidden = true;
     $("modalPreviewVideo").hidden = true;
@@ -1138,26 +1222,50 @@ Happy birthday.</textarea>
   }
 
   $("modalConfirmBtn").addEventListener("click", function () {
-    if (!pendingModalData) {
-      showToast("Please choose a photo or video first! 📷");
-      $("modalFileInput").click();
-      return;
-    }
-    var caption = $("modalCaptionInput").value.trim() || pendingModalData.filename || "Our moment";
+    var caption = $("modalCaptionInput").value.trim() || (pendingModalData && pendingModalData.filename) || "Our moment";
     if (modalTargetFrame) {
-      attachMediaSrc(modalTargetFrame, pendingModalData.dataUrl, pendingModalData.isVideo);
+      if (pendingModalData) {
+        attachMediaSrc(modalTargetFrame, pendingModalData.dataUrl, pendingModalData.isVideo);
+      }
       var parentCard = modalTargetFrame.closest(".polaroid");
       if (parentCard) {
         var capEl = parentCard.querySelector(".cap");
         if (capEl) capEl.textContent = caption;
       }
     } else {
-      var fr = makeCard(wall.children.length, caption, pendingModalData.dataUrl, pendingModalData.isVideo);
+      var dataUrl = pendingModalData ? pendingModalData.dataUrl : "";
+      var isVideo = pendingModalData ? pendingModalData.isVideo : false;
+      var fr = makeCard(wall.children.length, caption, dataUrl, isVideo);
       fr.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
     updateCardNumbers();
     closeCardModal();
-    showToast("Added to your memories! 💖");
+    persistStory();
+    showToast(pendingModalData ? "Added to your memories! 💖" : "Added memory card! Tap the frame to choose a photo. 📷");
+  });
+
+  /* Drag and drop images directly on wall */
+  wall.addEventListener("dragover", function (e) { e.preventDefault(); wall.classList.add("dragover"); });
+  wall.addEventListener("dragleave", function () { wall.classList.remove("dragover"); });
+  wall.addEventListener("drop", function (e) {
+    e.preventDefault();
+    wall.classList.remove("dragover");
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      var files = Array.prototype.slice.call(e.dataTransfer.files);
+      var added = 0;
+      files.forEach(function (f) {
+        processMediaFile(f, function (dataUrl, isVideo) {
+          makeCard(wall.children.length, f.name.replace(/\.[^.]+$/, ""), dataUrl, isVideo);
+          added++;
+          updateCardNumbers();
+          updateStudioCounts();
+          persistStory();
+          if (added === files.length) {
+            showToast("Added " + added + " memories to the wall! 💖");
+          }
+        });
+      });
+    }
   });
 
   /* Initial Memories Loading */
@@ -1167,7 +1275,7 @@ Happy birthday.</textarea>
     PRESET.memories.forEach(function (m, idx) {
       makeCard(idx, m.caption, m.src, m.isVideo);
     });
-  } else {
+  } else if (!restoreStoryFromStorage()) {
     for (var k = 0; k < sampleMemories.length; k++) {
       makeCard(k, sampleMemories[k].caption, sampleMemories[k].src);
     }
@@ -1190,19 +1298,32 @@ Happy birthday.</textarea>
     wall.querySelectorAll(".polaroid").forEach(function (card) {
       var img = card.querySelector("img");
       var vid = card.querySelector("video");
-      // If empty frame or default sample photo
       if (!img && !vid) {
-        card.remove();
-        removed++;
-      } else if (img && img.src && img.src.indexOf("images/photo") !== -1) {
         card.remove();
         removed++;
       }
     });
     updateCardNumbers();
     updateStudioCounts();
+    persistStory();
     showToast("Cleared placeholders! You can now add your own pictures. 🌟");
   });
+
+  $("letter").addEventListener("input", persistStory);
+  $("name").addEventListener("input", persistStory);
+  $("tag").addEventListener("input", persistStory);
+  $("since").addEventListener("change", persistStory);
+  $("sinceDisplay").addEventListener("blur", persistStory);
+
+  var sbReset = $("sbResetBtn");
+  if (sbReset) {
+    sbReset.addEventListener("click", function () {
+      if (confirm("Reset everything back to the clean template?")) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        location.reload();
+      }
+    });
+  }
 
   $("addPhotos").addEventListener("click", function () { $("photoInput").click(); });
   $("sbBulkBtn").addEventListener("click", function () { $("photoInput").click(); });
@@ -1273,7 +1394,7 @@ Happy birthday.</textarea>
 
   /* ---------- Music engine (Web Audio, supports a chosen start and stop) ---------- */
   var AC = window.AudioContext || window.webkitAudioContext, ctx = null;
-  var tracks = [], idx = -1, src = null, playing = false, t0 = 0, off = 0, token = 0, dragProg = false;
+  var idx = -1, src = null, playing = false, t0 = 0, off = 0, token = 0, dragProg = false;
   function ensureCtx() { if (!ctx) ctx = new AC(); if (ctx.state === "suspended") ctx.resume(); return ctx; }
   function cur() { return tracks[idx]; }
   function fmt(s) { if (!isFinite(s) || s < 0) s = 0; var m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + (r < 10 ? "0" : "") + r; }
@@ -1592,6 +1713,7 @@ Happy birthday.</textarea>
 
     var storyData = {
       name: ($("name").textContent || "").trim() || "My Love Sathya",
+      tag: ($("tag") ? $("tag").textContent : "").trim(),
       since: $("since").value || "2024-08-19",
       letter: $("letter").value || "",
       memories: memories,
@@ -1633,7 +1755,17 @@ Happy birthday.</textarea>
     if (letterEl) letterEl.textContent = storyData.letter;
 
     var nameEl = doc.querySelector("#name");
-    if (nameEl) nameEl.textContent = storyData.name;
+    if (nameEl) {
+      nameEl.textContent = storyData.name;
+      nameEl.removeAttribute("contenteditable");
+      nameEl.removeAttribute("title");
+    }
+    var tagEl = doc.querySelector("#tag");
+    if (tagEl) {
+      tagEl.textContent = storyData.tag;
+      tagEl.removeAttribute("contenteditable");
+      tagEl.removeAttribute("title");
+    }
 
     var sinceEl = doc.querySelector("#since");
     if (sinceEl) sinceEl.setAttribute("value", storyData.since);
